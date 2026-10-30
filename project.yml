@@ -1,0 +1,75 @@
+name: AIUsage
+options:
+  bundleIdPrefix: com.jlmxstudio
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # 改成你的 Apple Developer Team ID（Xcode → Settings → Accounts 可看到；免費 Apple ID 的 Personal Team 也可以）
+    DEVELOPMENT_TEAM: "YOUR_TEAM_ID"
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+  AIUsage:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: AI Usage
+        CFBundleDevelopmentRegion: zh-Hant
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.developer-tools
+        AppGroupIdentifier: $(TeamIdentifierPrefix)com.jlmxstudio.aiusage
+        CFBundleURLTypes:
+          - CFBundleURLName: com.jlmxstudio.aiusage
+            CFBundleURLSchemes: [aiusage]
+    entitlements:
+      path: App/AIUsage.entitlements
+      properties:
+        # host app 不開 sandbox：要讀 ~/.claude、~/.codex、跑 security / codex
+        com.apple.security.app-sandbox: false
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.jlmxstudio.aiusage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jlmxstudio.aiusage
+        PRODUCT_NAME: AIUsage
+    dependencies:
+      - target: AIUsageWidget
+        embed: true
+
+  AIUsageWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Widget
+      - Shared
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: AI 用量
+        CFBundleDevelopmentRegion: zh-Hant
+        AppGroupIdentifier: $(TeamIdentifierPrefix)com.jlmxstudio.aiusage
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/AIUsageWidget.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.jlmxstudio.aiusage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jlmxstudio.aiusage.widget
+        PRODUCT_NAME: AIUsageWidget
+        SKIP_INSTALL: YES
