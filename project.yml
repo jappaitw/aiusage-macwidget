@@ -8,7 +8,7 @@ options:
 settings:
   base:
     # 改成你的 Apple Developer Team ID（Xcode → Settings → Accounts 可看到；免費 Apple ID 的 Personal Team 也可以）
-    DEVELOPMENT_TEAM: "YOUR_TEAM_ID"
+    DEVELOPMENT_TEAM: "TUBWWB43W7"
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.0"

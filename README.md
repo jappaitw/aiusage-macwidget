@@ -28,7 +28,7 @@ Widget extension 一定要開 sandbox，沒辦法自己讀 `~/.claude`、Keychai
 ```bash
 brew install xcodegen
 cd AIUsage
-# 1. 把 project.yml 裡的 DEVELOPMENT_TEAM 改成你的 Team ID
+# 1. project.yml 已設定 DEVELOPMENT_TEAM（KunWei Lin team）；換帳號再改
 #    （Xcode → Settings → Accounts；免費 Apple ID 的 Personal Team 也可以）
 xcodegen generate
 open AIUsage.xcodeproj
