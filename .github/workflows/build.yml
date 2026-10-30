@@ -16,6 +16,9 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
             build 2>&1 | tee build.log | grep -E "error:|warning: .*(isolat|Sendable)|BUILD (SUCCEEDED|FAILED)" || true
+          grep -E "(warning|error): " build.log | grep -v "^ld: " | sed -E 's#^.*/AIUsage[^/]*/##' | sort -u | head -40 | while IFS= read -r line; do
+            case "$line" in *error:*) echo "::error::$line";; *) echo "::warning::$line";; esac
+          done
           grep -q "BUILD SUCCEEDED" build.log
       - uses: actions/upload-artifact@v4
         if: always()
