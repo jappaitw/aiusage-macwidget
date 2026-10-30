@@ -49,6 +49,27 @@ open AIUsage.xcodeproj
 
 這支 script 會用 Release 設定 build，裝到 `/Applications/AIUsage.app` 並啟動。裝好後，在面板上勾「登入時啟動」。之後改了程式碼，`git pull` 完再跑一次這支 script 就會更新。
 
+## 發佈 DMG（Developer ID 簽章＋Apple 公證）
+
+需要付費的 Apple Developer Program。產出的 DMG 任何 Mac 都能直接安裝，不需要 Xcode。
+
+**在本機發佈**
+
+```bash
+# 只需設定一次：先在 Xcode → Settings → Accounts → Manage Certificates → ＋ 建立 Developer ID Application 憑證
+xcrun notarytool store-credentials aiusage-notary --apple-id <你的 Apple ID> --team-id <Team ID>
+./scripts/release.sh 1.0.0      # 會產生 dist/AIUsage-1.0.0.dmg
+```
+
+**用 GitHub Actions 發佈**：在 repo 設定以下四個 secrets，之後只要 `git tag v1.0.0 && git push --tags`，就會自動 build、簽章、公證，並把 DMG 掛到 GitHub Release。
+
+| Secret | 內容 |
+| --- | --- |
+| `MACOS_CERT_P12_BASE64` | 匯出的 Developer ID .p12 檔，轉成 base64 |
+| `MACOS_CERT_PASSWORD` | .p12 的密碼 |
+| `APPLE_ID` | Apple ID email |
+| `APPLE_APP_PASSWORD` | 在 appleid.apple.com 建立的 App 專用密碼 |
+
 ## 你可能會碰到的狀況
 
 - **Keychain 授權視窗**：app 會先用 `/usr/bin/security` 讀 token，通常不會跳視窗；如果跳了，選「永遠允許」
