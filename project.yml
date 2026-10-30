@@ -19,6 +19,7 @@ targets:
   AIUsage:
     type: application
     platform: macOS
+    scheme: {}
     sources:
       - App
       - Shared
