@@ -41,6 +41,14 @@ open AIUsage.xcodeproj
 
 點 widget 會叫 app 馬上更新一次（`aiusage://refresh`）。
 
+## 正式安裝（不靠 Xcode 跑）
+
+```bash
+./scripts/install.sh
+```
+
+這支 script 會用 Release 設定 build，裝到 `/Applications/AIUsage.app` 並啟動。裝好後，在面板上勾「登入時啟動」。之後改了程式碼，`git pull` 完再跑一次這支 script 就會更新。
+
 ## 你可能會碰到的狀況
 
 - **Keychain 授權視窗**：app 會先用 `/usr/bin/security` 讀 token，通常不會跳視窗；如果跳了，選「永遠允許」
