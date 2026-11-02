@@ -3,66 +3,44 @@ import Foundation
 import WidgetKit
 
 enum Refresher {
-    static func run(previous: UsageSnapshot) async -> UsageSnapshot {
-        async let claudeLimits = capture { try await ClaudeUsageFetcher.fetch() }
-        async let codexLimits = Task.detached(priority: .utility) {
-            Swift.Result { try CodexUsageFetcher.fetchViaAppServer() }
+    /// 偵測這台 Mac 上有的服務，並行抓取，依 ProviderRegistry 的順序回傳
+    static func run(previous: [String: ProviderSnapshot]) async -> [ProviderSnapshot] {
+        let detected = await Task.detached(priority: .utility) {
+            ProviderRegistry.all.filter { $0.isDetected() }
         }.value
-        async let claudeScan = Task.detached(priority: .utility) { LocalTokenScanner.scanClaude() }.value
-        async let codexScan = Task.detached(priority: .utility) { LocalTokenScanner.scanCodex() }.value
 
-        let now = Date()
-        var claude = previous.claude
-        let claudeResult = await claudeLimits
-        switch claudeResult {
-        case .success(let limits):
-            claude.plan = limits.plan ?? claude.plan
-            claude.windows = limits.windows
-            claude.limitsUpdatedAt = now
-            claude.limitsSource = "API"
-            claude.error = nil
-        case .failure(let error):
-            // 抓失敗就保留上一次的數字，只標記錯誤
-            claude.error = error.localizedDescription
-        }
-        let cScan = await claudeScan
-        claude.daily = cScan.daily
-        claude.models = cScan.models
-
-        var codex = previous.codex
-        let xScan = await codexScan
-        let codexResult = await codexLimits
-        switch codexResult {
-        case .success(let limits):
-            codex.plan = limits.plan ?? codex.plan
-            codex.windows = limits.windows
-            codex.limitsUpdatedAt = now
-            codex.limitsSource = "app-server"
-            codex.error = nil
-        case .failure(let error):
-            if let fromLog = xScan.latestLimits, let at = xScan.latestLimitsAt {
-                codex.plan = fromLog.plan ?? codex.plan
-                // log 裡的重置時間已過，代表那個視窗早就歸零了
-                codex.windows = fromLog.windows.map { window in
-                    var w = window
-                    if let reset = w.resetsAt, reset < now { w.usedPercent = 0; w.resetsAt = nil }
-                    return w
-                }
-                codex.limitsUpdatedAt = at
-                codex.limitsSource = "session log"
-                codex.error = nil
-            } else {
-                codex.error = error.localizedDescription
+        return await withTaskGroup(of: (Int, ProviderSnapshot).self) { group in
+            for (index, provider) in detected.enumerated() {
+                let prior = previous[provider.id] ?? ProviderSnapshot(id: provider.id, name: provider.name)
+                group.addTask { (index, await refresh(provider, previous: prior)) }
             }
+            var results: [(Int, ProviderSnapshot)] = []
+            for await result in group { results.append(result) }
+            return results.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
-        codex.daily = xScan.daily
-        codex.models = xScan.models
-
-        return UsageSnapshot(generatedAt: now, claude: claude, codex: codex)
     }
 
-    private static func capture<T>(_ operation: () async throws -> T) async -> Swift.Result<T, Error> {
-        do { return .success(try await operation()) } catch { return .failure(error) }
+    private static func refresh(_ provider: any UsageProvider, previous: ProviderSnapshot) async -> ProviderSnapshot {
+        var snapshot = previous
+        snapshot.name = provider.name
+        async let scan = Task.detached(priority: .utility) { provider.scanTokens() }.value
+        do {
+            let limits = try await provider.fetchLimits()
+            snapshot.plan = limits.plan ?? snapshot.plan
+            snapshot.windows = limits.windows
+            snapshot.limitsUpdatedAt = limits.capturedAt ?? Date()
+            snapshot.limitsSource = limits.source
+            snapshot.error = nil
+        } catch {
+            // 抓失敗就保留上一次的數字，只標記錯誤
+            snapshot.error = error.localizedDescription
+        }
+        let scanned = await scan
+        if let tokens = scanned {
+            snapshot.daily = tokens.daily
+            snapshot.models = tokens.models
+        }
+        return snapshot
     }
 }
 
@@ -70,19 +48,31 @@ enum Refresher {
 final class UsageModel: ObservableObject {
     static let shared = UsageModel()
 
-    @Published private(set) var snapshot: UsageSnapshot
+    /// 偵測到的全部服務（含隱藏的）
+    @Published private(set) var providers: [ProviderSnapshot]
+    @Published private(set) var lastUpdated: Date
     @Published private(set) var isRefreshing = false
+    @Published private(set) var hidden: Set<String>
 
     private var timer: Timer?
     private var lastWidgetSignature: String?
     private var lastWidgetReload = Date.distantPast
     private var started = false
+    private static let hiddenKey = "hiddenProviders"
 
-    /// 每 5 分鐘抓一次（Claude API 太頻繁會 429）
+    /// 每 5 分鐘抓一次（太頻繁 Claude 會回 429）
     let interval: TimeInterval = 300
 
     private init() {
-        snapshot = SharedStore.load() ?? .empty
+        let stored = SharedStore.load()
+        providers = stored?.providers ?? []
+        lastUpdated = stored?.generatedAt ?? .distantPast
+        hidden = Set(UserDefaults.standard.stringArray(forKey: Self.hiddenKey) ?? [])
+    }
+
+    /// 給 widget／選單列看的（已排除隱藏的）
+    var snapshot: UsageSnapshot {
+        UsageSnapshot(generatedAt: lastUpdated, providers: providers.filter { !hidden.contains($0.id) })
     }
 
     func start() {
@@ -102,33 +92,42 @@ final class UsageModel: ObservableObject {
     func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
-        let previous = snapshot
+        let previous = Dictionary(providers.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         Task {
             let next = await Refresher.run(previous: previous)
-            snapshot = next
+            providers = next
+            lastUpdated = Date()
             isRefreshing = false
-            do { try SharedStore.save(next) } catch { NSLog("AIUsage: 寫入 App Group 失敗：\(error)") }
-            reloadWidgetIfNeeded(next)
+            publish(force: false)
         }
     }
 
-    /// WidgetKit 對背景 reload 有每日額度，數字沒變就不浪費（最多 30 分鐘強制一次）
-    private func reloadWidgetIfNeeded(_ s: UsageSnapshot) {
-        let signature = [s.claude, s.codex].map { p in
-            p.windows.map { "\($0.label)=\(Int($0.usedPercent.rounded()))" }.joined(separator: ",")
+    func setVisible(_ id: String, _ visible: Bool) {
+        if visible { hidden.remove(id) } else { hidden.insert(id) }
+        UserDefaults.standard.set(Array(hidden).sorted(), forKey: Self.hiddenKey)
+        publish(force: true)
+    }
+
+    /// 寫入 App Group；WidgetKit 對背景 reload 有每日額度，數字沒變就不 reload（最多 30 分鐘強制一次）
+    private func publish(force: Bool) {
+        let current = snapshot
+        do { try SharedStore.save(current) } catch { NSLog("AIUsage: 寫入 App Group 失敗：\(error)") }
+        let signature = current.providers.map { p in
+            "\(p.id):" + p.windows.map { "\($0.label)=\(Int($0.usedPercent.rounded()))" }.joined(separator: ",")
                 + "|e=\(p.error ?? "")|t=\(p.todayTokens / 200_000)"
         }.joined(separator: "#")
         let now = Date()
-        guard signature != lastWidgetSignature || now.timeIntervalSince(lastWidgetReload) > 1800 else { return }
+        guard force || signature != lastWidgetSignature || now.timeIntervalSince(lastWidgetReload) > 1800 else { return }
         lastWidgetSignature = signature
         lastWidgetReload = now
         WidgetCenter.shared.reloadAllTimelines()
     }
 
     var menuBarTitle: String {
-        func short(_ p: ProviderSnapshot) -> String {
-            p.windows.first.map { Format.percent($0.usedPercent) } ?? "–"
-        }
-        return "C \(short(snapshot.claude))  X \(short(snapshot.codex))"
+        let shown = snapshot.providers.prefix(2)
+        if shown.isEmpty { return "AI –" }
+        return shown.map { p in
+            "\(p.name.prefix(1)) " + (p.windows.first.map { Format.percent($0.usedPercent) } ?? "–")
+        }.joined(separator: "  ")
     }
 }

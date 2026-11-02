@@ -20,7 +20,10 @@ struct ModelTokens: Codable, Hashable, Identifiable {
     var tokens: Int
 }
 
-struct ProviderSnapshot: Codable, Hashable {
+struct ProviderSnapshot: Codable, Hashable, Identifiable {
+    /// 例如 "claude"、"codex"、"cursor"，對應 Brand 顏色
+    var id: String
+    var name: String
     var plan: String?
     var windows: [UsageWindow]
     /// 額度資料實際取得的時間（Codex 從 session log 讀時會是該事件的時間）
@@ -32,8 +35,10 @@ struct ProviderSnapshot: Codable, Hashable {
     /// 最近 7 天各模型 token，大→小
     var models: [ModelTokens]
 
-    init(plan: String? = nil, windows: [UsageWindow] = [], limitsUpdatedAt: Date? = nil,
+    init(id: String, name: String, plan: String? = nil, windows: [UsageWindow] = [], limitsUpdatedAt: Date? = nil,
          limitsSource: String? = nil, error: String? = nil, daily: [DayTokens] = [], models: [ModelTokens] = []) {
+        self.id = id
+        self.name = name
         self.plan = plan
         self.windows = windows
         self.limitsUpdatedAt = limitsUpdatedAt
@@ -49,17 +54,19 @@ struct ProviderSnapshot: Codable, Hashable {
     }
 
     var weekTokens: Int { daily.reduce(0) { $0 + $1.tokens } }
+
+    var hasTokenStats: Bool { !daily.isEmpty }
+
+    /// 最吃緊的那個視窗
+    var maxUsedPercent: Double? { windows.map(\.usedPercent).max() }
 }
 
 struct UsageSnapshot: Codable, Hashable {
     var generatedAt: Date
-    var claude: ProviderSnapshot
-    var codex: ProviderSnapshot
+    /// 依顯示順序排好、已過濾掉使用者隱藏的
+    var providers: [ProviderSnapshot]
 
-    static let empty = UsageSnapshot(
-        generatedAt: .distantPast,
-        claude: ProviderSnapshot(error: "開啟 AI Usage app 開始抓資料"),
-        codex: ProviderSnapshot(error: "開啟 AI Usage app 開始抓資料"))
+    static let empty = UsageSnapshot(generatedAt: .distantPast, providers: [])
 
     /// 小工具圖庫預覽用的假資料
     static var preview: UsageSnapshot {
@@ -70,27 +77,36 @@ struct UsageSnapshot: Codable, Hashable {
                 DayTokens(day: cal.date(byAdding: .day, value: i - (values.count - 1), to: today)!, tokens: v)
             }
         }
-        return UsageSnapshot(
-            generatedAt: Date(),
-            claude: ProviderSnapshot(
-                plan: "Max 5x",
+        func hours(_ h: Double) -> Date { Date().addingTimeInterval(h * 3600) }
+        return UsageSnapshot(generatedAt: Date(), providers: [
+            ProviderSnapshot(
+                id: "claude", name: "Claude", plan: "Max 5x",
                 windows: [
-                    UsageWindow(label: "5 小時", usedPercent: 42, resetsAt: Date().addingTimeInterval(2 * 3600)),
-                    UsageWindow(label: "每週", usedPercent: 63, resetsAt: Date().addingTimeInterval(3 * 86400)),
-                    UsageWindow(label: "每週 · Opus", usedPercent: 21, resetsAt: Date().addingTimeInterval(3 * 86400)),
+                    UsageWindow(label: "5 小時", usedPercent: 42, resetsAt: hours(2)),
+                    UsageWindow(label: "每週", usedPercent: 63, resetsAt: hours(72)),
+                    UsageWindow(label: "每週 · Opus", usedPercent: 21, resetsAt: hours(72)),
                 ],
                 limitsUpdatedAt: Date(), limitsSource: "API",
                 daily: days([8_200_000, 12_400_000, 5_100_000, 0, 9_800_000, 15_300_000, 6_700_000]),
                 models: [ModelTokens(model: "Opus 4.7", tokens: 41_000_000), ModelTokens(model: "Sonnet 4.6", tokens: 16_500_000)]),
-            codex: ProviderSnapshot(
-                plan: "Plus",
+            ProviderSnapshot(
+                id: "codex", name: "Codex", plan: "Plus",
                 windows: [
-                    UsageWindow(label: "5 小時", usedPercent: 18, resetsAt: Date().addingTimeInterval(4 * 3600)),
-                    UsageWindow(label: "每週", usedPercent: 77, resetsAt: Date().addingTimeInterval(2 * 86400)),
+                    UsageWindow(label: "5 小時", usedPercent: 18, resetsAt: hours(4)),
+                    UsageWindow(label: "每週", usedPercent: 77, resetsAt: hours(48)),
                 ],
                 limitsUpdatedAt: Date(), limitsSource: "app-server",
                 daily: days([1_200_000, 3_400_000, 2_100_000, 900_000, 4_800_000, 2_300_000, 1_700_000]),
-                models: [ModelTokens(model: "gpt-5.1-codex", tokens: 16_400_000)]))
+                models: [ModelTokens(model: "gpt-5.1-codex", tokens: 16_400_000)]),
+            ProviderSnapshot(
+                id: "cursor", name: "Cursor", plan: "Pro",
+                windows: [UsageWindow(label: "本期", usedPercent: 35, resetsAt: hours(24 * 12))],
+                limitsUpdatedAt: Date(), limitsSource: "API"),
+            ProviderSnapshot(
+                id: "copilot", name: "Copilot", plan: "Pro",
+                windows: [UsageWindow(label: "Premium", usedPercent: 54, resetsAt: hours(24 * 9))],
+                limitsUpdatedAt: Date(), limitsSource: "API"),
+        ])
     }
 }
 

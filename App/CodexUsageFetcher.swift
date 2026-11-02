@@ -140,27 +140,7 @@ enum CodexUsageFetcher {
     // MARK: - 找 codex 執行檔
 
     static func locateCodex() -> URL? {
-        let home = Shell.home.path
-        let candidates = [
-            "/opt/homebrew/bin/codex", "/usr/local/bin/codex",
-            "\(home)/.local/bin/codex", "\(home)/.npm-global/bin/codex", "\(home)/.bun/bin/codex",
-            "\(home)/.volta/bin/codex", "/Applications/Codex.app/Contents/Resources/codex",
-        ]
-        if let hit = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return URL(fileURLWithPath: hit)
-        }
-        // 最後問 login shell（nvm / asdf 之類）
-        for flags in ["-lc", "-ilc"] {
-            if let out = Shell.run("/bin/zsh", [flags, "command -v codex"], timeout: 8), out.status == 0 {
-                let path = String(decoding: out.stdout, as: UTF8.self)
-                    .split(separator: "\n").last.map(String.init)?
-                    .trimmingCharacters(in: .whitespaces) ?? ""
-                if path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) {
-                    return URL(fileURLWithPath: path)
-                }
-            }
-        }
-        return nil
+        Files.executable("codex", extra: ["/Applications/Codex.app/Contents/Resources/codex"])
     }
 }
 

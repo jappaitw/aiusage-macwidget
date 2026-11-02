@@ -34,15 +34,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MenuPanel: View {
     @ObservedObject var model: UsageModel
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var showSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            UsageDashboard(snapshot: model.snapshot)
+            UsageDashboard(snapshot: model.snapshot, maxProviders: 12, maxWindows: 4, showModels: true)
 
             VStack(alignment: .leading, spacing: 4) {
-                StatusLine(name: "Claude", snapshot: model.snapshot.claude)
-                StatusLine(name: "Codex", snapshot: model.snapshot.codex)
+                ForEach(model.snapshot.providers) { provider in
+                    StatusLine(provider: provider)
+                }
             }
+
+            DisclosureGroup("顯示的服務", isExpanded: $showSettings) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if model.providers.isEmpty {
+                        Text("還沒偵測到任何服務").foregroundStyle(.secondary)
+                    }
+                    ForEach(model.providers) { provider in
+                        Toggle(isOn: Binding(
+                            get: { !model.hidden.contains(provider.id) },
+                            set: { model.setVisible(provider.id, $0) }
+                        )) {
+                            HStack(spacing: 5) {
+                                Circle().fill(Brand.color(for: provider.id)).frame(width: 7, height: 7)
+                                Text(provider.name)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                    Text("支援：Claude Code、Codex、Cursor、GitHub Copilot、Gemini CLI、Antigravity。偵測到登入資料就會自動出現。")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.top, 4)
+            }
+            .font(.callout)
 
             Divider()
 
@@ -71,22 +98,21 @@ struct MenuPanel: View {
             .font(.callout)
         }
         .padding(14)
-        .frame(width: 380)
+        .frame(width: 400)
     }
 }
 
 /// 面板下方的資料來源／錯誤說明
 private struct StatusLine: View {
-    var name: String
-    var snapshot: ProviderSnapshot
+    var provider: ProviderSnapshot
 
     var body: some View {
         Group {
-            if let error = snapshot.error {
-                Label("\(name)：\(error)", systemImage: "exclamationmark.triangle")
+            if let error = provider.error {
+                Label("\(provider.name)：\(error)", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
-            } else if let at = snapshot.limitsUpdatedAt {
-                (Text("\(name) 額度來源：\(snapshot.limitsSource ?? "–")，取得於 ") + Text(at, style: .relative) + Text(" 前"))
+            } else if let at = provider.limitsUpdatedAt {
+                (Text("\(provider.name)：\(provider.limitsSource ?? "–")，") + Text(at, style: .relative) + Text(" 前"))
                     .foregroundStyle(.secondary)
             }
         }

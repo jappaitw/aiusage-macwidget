@@ -1,6 +1,17 @@
-# AI Usage — Claude / Codex 用量桌面小工具
+# AI Usage — AI 服務用量桌面小工具
 
-原生 macOS WidgetKit 小工具（小／中／大三種尺寸）＋一個常駐選單列的小 app。
+原生 macOS WidgetKit 小工具（小／中／大三種尺寸）＋一個常駐選單列的小 app。會**自動偵測**這台 Mac 上已安裝或已登入的 AI 服務，有偵測到才顯示：
+
+| 服務 | 顯示內容 | 資料來源 |
+| --- | --- | --- |
+| Claude（Claude Code） | 5 小時／每週／每週·模型 | Keychain 裡的 OAuth token → `api.anthropic.com/api/oauth/usage` |
+| Codex | 5 小時／每週 | `codex app-server`，或 `~/.codex/sessions` |
+| Cursor | 本期用量（含 Auto、API 模型） | Cursor 的 `state.vscdb` → Dashboard API |
+| GitHub Copilot | Premium 請求／Chat／補全（月） | `~/.config/github-copilot` → `copilot_internal/user` |
+| Gemini CLI | 各模型額度 | `~/.gemini/oauth_creds.json` → Code Assist quota |
+| Antigravity | 各模型群組 5 小時／每週 | `~/.gemini/antigravity-cli` → Code Assist quota summary |
+
+ChatGPT 和 Claude 的桌面版沒有對外提供用量資料：ChatGPT 方案的額度只能透過 Codex 看，Claude 方案的額度只能透過 Claude Code 看。要新增其他服務，只需實作 `UsageProvider`，再把它加進 `ProviderRegistry.all`（`App/Providers.swift`）。
 
 - **Claude**：5 小時、每週、每週·特定模型（Opus/Sonnet…）的額度百分比和重置倒數；額外用量有開的話也會顯示
 - **Codex**：5 小時、每週額度和重置倒數
