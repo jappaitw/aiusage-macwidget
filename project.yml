@@ -69,6 +69,10 @@ targets:
         com.apple.security.app-sandbox: true
         com.apple.security.application-groups:
           - $(TeamIdentifierPrefix)com.jlmxstudio.aiusage
+        # ad-hoc 簽章的 App Group 授權無效，sandbox 會擋 widget 讀 group container；
+        # 讓 widget 能唯讀 host app 另外寫的 ~/Library/Application Support/AIUsage/
+        com.apple.security.temporary-exception.files.home-relative-path.read-only:
+          - /Library/Application Support/AIUsage/
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jlmxstudio.aiusage.widget
