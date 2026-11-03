@@ -60,9 +60,19 @@ jobs:
           if ls dist/*-unsigned.dmg >/dev/null 2>&1; then
             NOTE="$(printf '> [!NOTE]\n> 這個 DMG 未經 Apple 公證。安裝後第一次啟動前先執行：\n> ```\n> xattr -dr com.apple.quarantine /Applications/AIUsage.app\n> ```\n')"
           fi
-          gh release create "$GITHUB_REF_NAME" dist/*.dmg \
-            --title "AI Usage $GITHUB_REF_NAME" --generate-notes \
-            ${NOTE:+--notes "$NOTE"}
+          # 從 GitHub 網頁「Draft a new release」發佈時 release 已經存在，改成把 DMG 掛上去
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.dmg --clobber --repo "$GITHUB_REPOSITORY"
+            if [ -n "$NOTE" ]; then
+              CURRENT="$(gh release view "$GITHUB_REF_NAME" --json body --jq .body --repo "$GITHUB_REPOSITORY")"
+              gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                --notes "$(printf '%s\n\n%s' "$NOTE" "$CURRENT")"
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.dmg \
+              --title "AI Usage $GITHUB_REF_NAME" --generate-notes \
+              ${NOTE:+--notes "$NOTE"}
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
