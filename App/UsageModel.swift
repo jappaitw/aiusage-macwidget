@@ -123,11 +123,18 @@ final class UsageModel: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
+    /// 選單列縮寫：名字第一個字母會撞（Claude/Codex/Cursor/Copilot 都是 C），改用固定表
+    private static let menuInitials = [
+        "claude": "C", "codex": "X", "cursor": "Cu",
+        "copilot": "Cp", "gemini": "G", "antigravity": "A",
+    ]
+
     var menuBarTitle: String {
         let shown = snapshot.providers.prefix(2)
         if shown.isEmpty { return "AI –" }
         return shown.map { p in
-            "\(p.name.prefix(1)) " + (p.windows.first.map { Format.percent($0.usedPercent) } ?? "–")
+            let initial = Self.menuInitials[p.id] ?? String(p.name.prefix(1))
+            return "\(initial) " + (p.windows.first.map { Format.percent($0.usedPercent) } ?? "–")
         }.joined(separator: "  ")
     }
 }
