@@ -304,6 +304,10 @@ struct UsageDashboard: View {
             }
             if showChart, shown.contains(where: \.hasTokenStats) {
                 Divider()
+                Text("本機 token 統計 · 只含這台 Mac 的 CLI 用量")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
                 TokenChart(providers: shown).frame(minHeight: 60, maxHeight: 110)
                 TokenSummary(providers: shown)
             }
