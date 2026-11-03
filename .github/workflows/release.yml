@@ -18,12 +18,14 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # 有 MACOS_CERT_P12_BASE64 secret → Developer ID 簽章＋公證；
+      # 沒有 → 跳過，release.sh 會自動退回 ad-hoc（universal、可安裝，但使用者要自己過 Gatekeeper）
       - name: Import Developer ID certificate
+        if: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
         env:
           P12: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
-          if [ -z "$P12" ]; then echo "::error::缺少 MACOS_CERT_P12_BASE64 secret"; exit 1; fi
           KC="$RUNNER_TEMP/signing.keychain-db"
           KCPW="$(uuidgen)"
           echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
@@ -41,13 +43,23 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           BUILD_NUMBER: ${{ github.run_number }}
-        run: ./scripts/release.sh "${GITHUB_REF_NAME#v}"
+        run: |
+          VERSION="$GITHUB_REF_NAME"
+          [[ "$VERSION" == v* ]] && VERSION="${VERSION#v}" || VERSION=""
+          ./scripts/release.sh $VERSION
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg --title "AI Usage $GITHUB_REF_NAME" --generate-notes
+        run: |
+          NOTE=""
+          if ls dist/*-unsigned.dmg >/dev/null 2>&1; then
+            NOTE="$(printf '> [!NOTE]\n> 這個 DMG 未經 Apple 公證。安裝後第一次啟動前先執行：\n> ```\n> xattr -dr com.apple.quarantine /Applications/AIUsage.app\n> ```\n')"
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/*.dmg \
+            --title "AI Usage $GITHUB_REF_NAME" --generate-notes \
+            ${NOTE:+--notes "$NOTE"}
 
       - uses: actions/upload-artifact@v4
         if: always()

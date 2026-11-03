@@ -60,9 +60,13 @@ open AIUsage.xcodeproj
 
 這支 script 會用 Release 設定 build，裝到 `/Applications/AIUsage.app` 並啟動。裝好後，在面板上勾「登入時啟動」。之後改了程式碼，`git pull` 完再跑一次這支 script 就會更新。
 
-## 發佈 DMG（Developer ID 簽章＋Apple 公證）
+## 發佈 DMG（universal：所有 Apple Silicon 和 Intel Mac 都能裝）
 
-需要付費的 Apple Developer Program。產出的 DMG 任何 Mac 都能直接安裝，不需要 Xcode。
+`scripts/release.sh` 會 build **universal binary（arm64 + x86_64）**，app 和 widget extension 都會用 `lipo` 驗證兩種架構齊全，所以同一個 DMG 在任何 M 系列（M1～M4…）和 Intel 的 Mac 上都能安裝，不需要 Xcode。有兩種模式：
+
+### 模式 A：Developer ID 簽章＋Apple 公證（建議）
+
+需要付費的 Apple Developer Program。產出的 DMG 使用者下載後直接打開就能裝。
 
 **在本機發佈**
 
@@ -80,6 +84,24 @@ xcrun notarytool store-credentials aiusage-notary --apple-id <你的 Apple ID> -
 | `MACOS_CERT_PASSWORD` | .p12 的密碼 |
 | `APPLE_ID` | Apple ID email |
 | `APPLE_APP_PASSWORD` | 在 appleid.apple.com 建立的 App 專用密碼 |
+
+### 模式 B：Ad-hoc 簽章（免費，不公證）
+
+沒有付費開發者帳號也能發佈。Keychain 裡找不到 Developer ID 憑證時，`release.sh` 會自動退回這個模式（或直接 `ADHOC=1 ./scripts/release.sh 1.0.0` 強制），產出 `dist/AIUsage-<版本>-unsigned.dmg`。GitHub Actions 也一樣：**不設任何 secrets** 直接 `git tag v1.0.0 && git push --tags`，就會發佈 ad-hoc 版的 Release。
+
+因為沒有經過 Apple 公證，使用者把 app 拖進「應用程式」後，第一次啟動前要先解除 Gatekeeper 隔離（擇一）：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/AIUsage.app
+```
+
+或：右鍵點 app → 開啟（macOS 15 以上會先被擋下來，要再到 系統設定 → 隱私權與安全性 → 捲到最下面按「強制打開」）。macOS 15 以上第一次啟動時，若跳出詢問是否允許存取其他 app 的資料（App Group），選「允許」widget 才讀得到資料。
+
+### 安裝（使用者端）
+
+1. 從 [Releases](../../releases) 下載 DMG → 打開 → 把 **AIUsage** 拖進 **Applications**
+2. 未公證版（檔名帶 `-unsigned`）照上面的方式解除隔離；公證版直接打開即可
+3. 桌面右鍵 →「編輯小工具」→ 搜尋「AI 用量」→ 拖到桌面；面板勾「登入時啟動」
 
 ## 你可能會碰到的狀況
 
