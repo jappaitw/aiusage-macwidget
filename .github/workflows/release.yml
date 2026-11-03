@@ -10,6 +10,9 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
+    env:
+      # secrets 不能直接用在 step 的 if: 裡，先轉成 env 再判斷
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +24,7 @@ jobs:
       # 有 MACOS_CERT_P12_BASE64 secret → Developer ID 簽章＋公證；
       # 沒有 → 跳過，release.sh 會自動退回 ad-hoc（universal、可安裝，但使用者要自己過 Gatekeeper）
       - name: Import Developer ID certificate
-        if: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+        if: ${{ env.HAS_CERT == 'true' }}
         env:
           P12: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
