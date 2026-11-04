@@ -104,7 +104,7 @@ xattr -dr com.apple.quarantine /Applications/AIUsage.app
 ### 安裝（使用者端）
 
 1. 從 [Releases](../../releases) 下載 DMG → 打開 → 把 **AIUsage** 拖進 **Applications**
-2. 未公證版（檔名帶 `-unsigned`）照上面的方式解除隔離；公證版直接打開即可
+2. v1.0.6 起的正式版都經過 Developer ID 簽章＋Apple 公證，下載後直接打開即可；只有檔名帶 `-unsigned` 的舊版才需要照上面的方式解除隔離
 3. 桌面右鍵 →「編輯小工具」→ 搜尋「AI 用量」→ 拖到桌面；面板勾「登入時啟動」
 
 ## 你可能會碰到的狀況
