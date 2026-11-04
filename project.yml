@@ -45,6 +45,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jlmxstudio.aiusage
         PRODUCT_NAME: AIUsage
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - target: AIUsageWidget
         embed: true

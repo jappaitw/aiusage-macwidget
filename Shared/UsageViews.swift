@@ -296,12 +296,16 @@ struct ModelList: View {
 struct UpdatedFooter: View {
     var snapshot: UsageSnapshot
 
+    private static let versionSuffix: String =
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+            .map { " · v\($0)" } ?? ""
+
     var body: some View {
         Group {
             if snapshot.generatedAt == .distantPast {
-                Text("尚未更新")
+                Text("尚未更新" + Self.versionSuffix)
             } else {
-                Text("更新於 ") + Text(snapshot.generatedAt, style: .time)
+                Text("更新於 ") + Text(snapshot.generatedAt, style: .time) + Text(Self.versionSuffix)
             }
         }
         .font(.caption2)
