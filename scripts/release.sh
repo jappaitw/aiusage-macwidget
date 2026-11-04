@@ -46,6 +46,7 @@ echo "▸ Building (universal arm64 + x86_64, Release)…"
 xcodebuild -project AIUsage.xcodeproj -scheme AIUsage -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath build \
   ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$IDENTITY" \
   PROVISIONING_PROFILE_SPECIFIER="" OTHER_CODE_SIGN_FLAGS="$SIGN_FLAGS" \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${BUILD_NUMBER:-1}" \
