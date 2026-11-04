@@ -85,6 +85,10 @@ xcrun notarytool store-credentials aiusage-notary --apple-id <你的 Apple ID> -
 | `APPLE_ID` | Apple ID email |
 | `APPLE_APP_PASSWORD` | 在 appleid.apple.com 建立的 App 專用密碼 |
 
+### 全自動發佈（auto-release workflow）
+
+推送到 `claude/**` 分支且 build 綠燈後，`auto-release` workflow 會自動：開 PR → 合併進 main → 把最新 `v*` tag 的 patch 版號 +1 打新 tag → 觸發 release，把 DMG 掛上 GitHub Release。commit 訊息含 `[no-release]` 時只合併不發版；要停用就刪掉 `.github/workflows/auto-release.yml`。（需要在 repo 的 Actions 設定勾選「Allow GitHub Actions to create and approve pull requests」。）
+
 ### 模式 B：Ad-hoc 簽章（免費，不公證）
 
 沒有付費開發者帳號也能發佈。Keychain 裡找不到 Developer ID 憑證時，`release.sh` 會自動退回這個模式（或直接 `ADHOC=1 ./scripts/release.sh 1.0.0` 強制），產出 `dist/AIUsage-<版本>-unsigned.dmg`。GitHub Actions 也一樣：**不設任何 secrets** 直接 `git tag v1.0.0 && git push --tags`，就會發佈 ad-hoc 版的 Release。
