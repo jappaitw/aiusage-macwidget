@@ -74,9 +74,6 @@ struct AIUsageWidget: Widget {
         .configurationDisplayName("AI 用量")
         .description("自動偵測 Claude、Codex、Cursor、Copilot、Gemini、Antigravity 的額度和重置時間")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
-        // 背景可移除的 widget 在桌面的毛玻璃／單色狀態會被去飽和、文字看不見；
-        // 宣告不可移除，系統就會像氣象那樣永遠全彩渲染
-        .containerBackgroundRemovable(false)
     }
 }
 

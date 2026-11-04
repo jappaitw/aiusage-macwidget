@@ -1,0 +1,69 @@
+name: auto-release
+# claude/** 分支的 build 綠燈後：自動開 PR → 合併進 main → patch 版號 +1 打 tag → 觸發 release
+# 跳過發版：commit 訊息包含 [no-release]（仍會合併）
+# 要暫停整個自動化：刪掉這個檔案即可
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  merge-and-release:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create PR if missing
+        run: |
+          PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "$(git log -1 --format=%s "$SHA")" \
+              --body "由 auto-release workflow 自動建立：build 綠燈後自動合併並發佈新版。"
+            PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          fi
+          echo "PR=$PR" >> "$GITHUB_ENV"
+
+      - name: Merge PR
+        run: |
+          # 確認這個 build 跑的 commit 仍是分支最新的，避免合併到已被覆蓋的狀態
+          HEAD=$(git rev-parse "origin/$BRANCH")
+          if [ "$HEAD" != "$SHA" ]; then
+            echo "::notice::分支已有更新的 commit（$HEAD），等那個 build 的結果，這次不動作"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          gh pr merge "$PR" --merge
+
+      - name: Tag next version and trigger release
+        if: env.SKIP != '1'
+        run: |
+          if git log -1 --format=%B "$SHA" | grep -q '\[no-release\]'; then
+            echo "::notice::commit 標記了 [no-release]，只合併不發版"
+            exit 0
+          fi
+          git fetch origin main --tags
+          LATEST=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+          LATEST=${LATEST:-v1.0.0}
+          IFS=. read -r MA MI PA <<<"${LATEST#v}"
+          NEXT="v$MA.$MI.$((PA+1))"
+          git tag "$NEXT" "$(git rev-parse origin/main)"
+          git push origin "$NEXT"
+          # GITHUB_TOKEN 推的 tag 不會自動觸發 release workflow，要明確 dispatch
+          gh workflow run release.yml --ref "$NEXT"
+          echo "::notice::已發起 $NEXT 的 release"
