@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import WidgetKit
 
 enum Brand {
     static func color(for id: String) -> Color {
@@ -19,6 +20,33 @@ enum Brand {
         if percent >= 70 { return .orange }
         return accent
     }
+}
+
+/// 桌面 widget 的毛玻璃（vibrant）狀態會把自訂顏色去飽和成幾乎看不見的材質。
+/// 這時改用 primary 的不透明度階層（系統內建 widget 的做法），對比交給系統的 vibrant 材質保證；
+/// 全彩狀態和選單列面板則照用品牌色。
+struct Palette {
+    var vibrant: Bool
+
+    init(_ mode: WidgetRenderingMode) { vibrant = mode == .vibrant }
+
+    func brand(_ id: String) -> Color {
+        vibrant ? Color.primary.opacity(Self.opacities[id] ?? 0.8) : Brand.color(for: id)
+    }
+
+    /// 進度條：全彩時依用量變紅／橘，vibrant 時維持該服務的階層色
+    func level(_ percent: Double, id: String) -> Color {
+        vibrant ? brand(id) : Brand.level(percent, accent: Brand.color(for: id))
+    }
+
+    /// 警示色（爆量的紅色百分比、錯誤的橘色驚嘆號）
+    func alert(_ base: Color) -> Color { vibrant ? .primary : base }
+
+    /// 同一張疊加長條圖裡區分服務用的不透明度
+    private static let opacities: [String: Double] = [
+        "claude": 1.0, "codex": 0.55, "cursor": 0.4,
+        "copilot": 0.75, "gemini": 0.6, "antigravity": 0.45,
+    ]
 }
 
 struct UsageBar: View {
@@ -42,10 +70,12 @@ struct UsageBar: View {
 struct ProviderHeader: View {
     var provider: ProviderSnapshot
     var showReset = true
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
+        let palette = Palette(renderingMode)
         HStack(spacing: 5) {
-            Circle().fill(Brand.color(for: provider.id)).frame(width: 7, height: 7)
+            Circle().fill(palette.brand(provider.id)).frame(width: 7, height: 7)
             Text(provider.name).font(.caption.weight(.semibold)).lineLimit(1)
             if let plan = Format.plan(provider.plan) {
                 Text(plan).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
@@ -54,7 +84,7 @@ struct ProviderHeader: View {
             if provider.error != nil {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.caption2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(palette.alert(.orange))
             } else if showReset, let reset = provider.windows.first?.resetsAt, reset > Date() {
                 (Text("重置 ") + Text(reset, style: .relative))
                     .font(.caption2)
@@ -68,9 +98,11 @@ struct ProviderHeader: View {
 /// 一個視窗：標籤＋百分比＋進度條
 struct MiniWindow: View {
     var window: UsageWindow
-    var accent: Color
+    var providerID: String
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
+        let palette = Palette(renderingMode)
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 3) {
                 Text(window.label).foregroundStyle(.secondary).lineLimit(1)
@@ -78,11 +110,11 @@ struct MiniWindow: View {
                 Text(Format.percent(window.usedPercent))
                     .monospacedDigit()
                     .fontWeight(.semibold)
-                    .foregroundStyle(window.usedPercent >= 90 ? Color.red : Color.primary)
+                    .foregroundStyle(window.usedPercent >= 90 ? palette.alert(.red) : Color.primary)
             }
             .font(.caption2)
             UsageBar(fraction: window.usedPercent / 100,
-                     color: Brand.level(window.usedPercent, accent: accent), height: 5)
+                     color: palette.level(window.usedPercent, id: providerID), height: 5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -111,7 +143,7 @@ struct ProviderRow: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, pair in
                     HStack(spacing: 12) {
                         ForEach(pair) { window in
-                            MiniWindow(window: window, accent: Brand.color(for: provider.id))
+                            MiniWindow(window: window, providerID: provider.id)
                         }
                         if pair.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
                     }
@@ -124,26 +156,28 @@ struct ProviderRow: View {
 /// 精簡版（小尺寸 widget）：第一個視窗的大數字＋第二個視窗一行
 struct CompactProvider: View {
     var provider: ProviderSnapshot
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
-        let accent = Brand.color(for: provider.id)
+        let palette = Palette(renderingMode)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Circle().fill(accent).frame(width: 7, height: 7)
+                Circle().fill(palette.brand(provider.id)).frame(width: 7, height: 7)
                 Text(provider.name).font(.caption.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 0)
                 if let first = provider.windows.first {
                     Text(Format.percent(first.usedPercent))
                         .font(.title3.weight(.bold).monospacedDigit())
-                        .foregroundStyle(first.usedPercent >= 90 ? Color.red : Color.primary)
+                        .foregroundStyle(first.usedPercent >= 90 ? palette.alert(.red) : Color.primary)
                 } else {
                     Image(systemName: provider.error == nil ? "minus" : "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundStyle(provider.error == nil ? Color.secondary : Color.orange)
+                        .foregroundStyle(provider.error == nil ? Color.secondary : palette.alert(.orange))
                 }
             }
             if let first = provider.windows.first {
-                UsageBar(fraction: first.usedPercent / 100, color: Brand.level(first.usedPercent, accent: accent))
+                UsageBar(fraction: first.usedPercent / 100,
+                         color: palette.level(first.usedPercent, id: provider.id))
                 HStack(spacing: 4) {
                     if let reset = first.resetsAt, reset > Date() {
                         Text(reset, style: .relative)
@@ -166,6 +200,7 @@ struct CompactProvider: View {
 
 struct TokenChart: View {
     var providers: [ProviderSnapshot]
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private struct Point: Identifiable {
         var id: String { "\(source)-\(day.timeIntervalSince1970)" }
@@ -188,7 +223,7 @@ struct TokenChart: View {
                 .cornerRadius(2)
         }
         .chartForegroundStyleScale(domain: withStats.map(\.name),
-                                   range: withStats.map { Brand.color(for: $0.id) })
+                                   range: withStats.map { Palette(renderingMode).brand($0.id) })
         .chartLegend(.hidden)
         .chartXAxis {
             AxisMarks(values: .stride(by: .day)) { _ in
@@ -208,12 +243,13 @@ struct TokenChart: View {
 
 struct TokenSummary: View {
     var providers: [ProviderSnapshot]
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
         HStack(spacing: 10) {
             ForEach(providers.filter(\.hasTokenStats)) { p in
                 HStack(spacing: 3) {
-                    Circle().fill(Brand.color(for: p.id)).frame(width: 5, height: 5)
+                    Circle().fill(Palette(renderingMode).brand(p.id)).frame(width: 5, height: 5)
                     Text("今日 \(Format.tokens(p.todayTokens)) · 7天 \(Format.tokens(p.weekTokens))")
                         .monospacedDigit()
                 }
@@ -228,6 +264,7 @@ struct TokenSummary: View {
 struct ModelList: View {
     var providers: [ProviderSnapshot]
     var limit = 4
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     private struct Row: Identifiable {
         var id: String { "\(source)-\(model)" }
@@ -245,7 +282,7 @@ struct ModelList: View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(rows) { row in
                 HStack(spacing: 5) {
-                    RoundedRectangle(cornerRadius: 1.5).fill(Brand.color(for: row.source)).frame(width: 3, height: 10)
+                    RoundedRectangle(cornerRadius: 1.5).fill(Palette(renderingMode).brand(row.source)).frame(width: 3, height: 10)
                     Text(row.model).lineLimit(1)
                     Spacer(minLength: 4)
                     Text(Format.tokens(row.tokens)).monospacedDigit().foregroundStyle(.secondary)
